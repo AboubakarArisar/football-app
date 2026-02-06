@@ -35,6 +35,14 @@ function updateUI(matchState) {
   const statusBadge = document.querySelector('.status-badge');
   statusBadge.className = `status-badge ${matchState.status}`;
   statusBadge.textContent = matchState.status.replace('_', ' ').toUpperCase();
+
+  // Show/Hide settings section based on match status
+  const settingsSection = document.getElementById('matchSettingsSection');
+  if (matchState.status === 'not_started') {
+    settingsSection.style.display = 'block';
+  } else {
+    settingsSection.style.display = 'none';
+  }
   
   // Update team names
   const homeTeamName = document.getElementById('homeTeamName');
@@ -216,17 +224,18 @@ document.getElementById('setAwayTeam').addEventListener('click', async () => {
 
 // Half duration setter
 document.getElementById('setHalfDuration').addEventListener('click', async () => {
-  const duration = parseInt(document.getElementById('halfDurationInput').value);
-  if (duration && duration > 0) {
+  const durationMinutes = parseInt(document.getElementById('halfDurationInput').value);
+  if (durationMinutes && durationMinutes > 0) {
+    const durationSeconds = durationMinutes * 60;
     try {
       const response = await fetch('/api/match/half-duration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duration })
+        body: JSON.stringify({ duration: durationSeconds })
       });
       const data = await response.json();
       if (data.success) {
-        alert(`Half duration set to ${duration} seconds (${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')})`);
+        alert(`Half duration set to ${durationMinutes} minutes (${durationSeconds} seconds)`);
       } else {
         alert(data.message || 'Failed to set half duration');
       }

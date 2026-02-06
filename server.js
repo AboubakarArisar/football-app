@@ -42,6 +42,10 @@ hbs.registerHelper('json', function(context) {
   return JSON.stringify(context, null, 2);
 });
 
+hbs.registerHelper('toMinutes', function(seconds) {
+  return Math.floor(seconds / 60);
+});
+
 // Serve static files
 app.use(express.static('public'));
 app.use(express.json());
