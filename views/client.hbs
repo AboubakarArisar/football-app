@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football Match Live</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="client-body">
+  <div class="container">
+    <header>
+      <h1>⚽ Live Football Match</h1>
+    </header>
+
+    <div class="match-status">
+      <div class="status-badge {{matchState.status}}" id="statusBadge">
+        {{#replace matchState.status '_' ' '}}{{uppercase this}}{{/replace}}
+      </div>
+    </div>
+
+    <div class="score-section">
+      <div class="team home">
+        <div class="team-name" id="homeTeamName">{{matchState.homeTeam}}</div>
+        <div class="score" id="homeScore">{{matchState.homeScore}}</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team away">
+        <div class="team-name" id="awayTeamName">{{matchState.awayTeam}}</div>
+        <div class="score" id="awayScore">{{matchState.awayScore}}</div>
+      </div>
+    </div>
+
+    <div class="timer-section">
+      <div class="half-display">Half <span id="halfDisplay">{{matchState.currentHalf}}</span></div>
+      <div class="timer-display" id="timerDisplay">00:00</div>
+      <div class="extra-time-display">Extra Time: +{{matchState.extraTime}}s</div>
+    </div>
+
+    <div class="match-info">
+      <div class="info-card">
+        <h3>Match Information</h3>
+        <p>Status: <span id="matchStatus">{{#replace matchState.status '_' ' '}}{{uppercase this}}{{/replace}}</span>
+        </p>
+        <p>Current Half: <span id="currentHalf">{{matchState.currentHalf}}</span></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/client.js"></script>
+</body>
+
+</html>

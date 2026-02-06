@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football Match Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="admin-body">
+  <div class="container">
+    <header>
+      <h1>⚽ Football Match Admin</h1>
+      <div class="status-badge {{matchState.status}}">
+        {{#replace matchState.status '_' ' '}}{{uppercase this}}{{/replace}}
+      </div>
+    </header>
+
+    <div class="match-info">
+      <div class="score-display">
+        <div class="team home">
+          <h2 id="homeTeamName">{{matchState.homeTeam}}</h2>
+          <div class="score">{{matchState.homeScore}}</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="team away">
+          <h2 id="awayTeamName">{{matchState.awayTeam}}</h2>
+          <div class="score">{{matchState.awayScore}}</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <div class="control-group">
+        <h3>Match Settings</h3>
+        <div class="setting-item">
+          <label>Home Team Name:</label>
+          <input type="text" id="homeTeamInput" value="{{matchState.homeTeam}}" placeholder="Home Team">
+          <button class="btn btn-small" id="setHomeTeam">Set</button>
+        </div>
+        <div class="setting-item">
+          <label>Away Team Name:</label>
+          <input type="text" id="awayTeamInput" value="{{matchState.awayTeam}}" placeholder="Away Team">
+          <button class="btn btn-small" id="setAwayTeam">Set</button>
+        </div>
+        <div class="setting-item">
+          <label>Half Duration (seconds):</label>
+          <input type="number" id="halfDurationInput" value="{{matchState.halfDuration}}" min="1" {{#unless (eq matchState.status 'not_started')}}disabled{{/unless}}>
+          <button class="btn btn-small" id="setHalfDuration" {{#unless (eq matchState.status 'not_started')}}disabled{{/unless}}>Set</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="timer-section">
+      <div class="timer-display">
+        <div class="half">Half {{matchState.currentHalf}}</div>
+        <div class="time" id="timerDisplay">00:00</div>
+        <div class="extra-time">Extra Time: +{{matchState.extraTime}}s</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <h3>Match Controls</h3>
+        <button class="btn btn-primary" id="startMatch" {{#unless (eq matchState.status 'not_started'
+          )}}disabled{{/unless}}>Start Match</button>
+        <button class="btn btn-secondary" id="startSecondHalf" {{#unless (eq matchState.status 'half_time'
+          )}}disabled{{/unless}}>Start Second Half</button>
+        <button class="btn btn-danger" id="resetMatch">Reset Match</button>
+      </div>
+
+      <div class="control-group">
+        <h3>Match Control</h3>
+        <button class="btn btn-warning" id="pauseMatch" {{#unless (or (eq matchState.status 'first_half') (eq matchState.status 'second_half'))}}disabled{{/unless}}>
+          ⏸️ Pause Match
+        </button>
+        <button class="btn btn-success" id="resumeMatch" {{#unless (eq matchState.status 'paused')}}disabled{{/unless}}>
+          ▶️ Resume Match
+        </button>
+      </div>
+      
+      <div class="control-group">
+        <h3>Score Goals</h3>
+        <div class="score-buttons">
+          <button class="btn btn-goal btn-home" id="scoreHome" {{#unless (canScore
+            matchState.status)}}disabled{{/unless}}>
+            ⚽ Home Goal
+          </button>
+          <button class="btn btn-goal btn-away" id="scoreAway" {{#unless (canScore
+            matchState.status)}}disabled{{/unless}}>
+            ⚽ Away Goal
+          </button>
+        </div>
+      </div>
+      
+      <div class="control-group">
+        <h3>Penalty</h3>
+        <div class="score-buttons">
+          <button class="btn btn-penalty btn-home" id="penaltyHome" {{#unless (or (canScore matchState.status) (eq matchState.status 'paused'))}}disabled{{/unless}}>
+            ⚖️ Home Penalty
+          </button>
+          <button class="btn btn-penalty btn-away" id="penaltyAway" {{#unless (or (canScore matchState.status) (eq matchState.status 'paused'))}}disabled{{/unless}}>
+            ⚖️ Away Penalty
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="match-state">
+      <h3>Current Match State</h3>
+      <pre id="matchStateDisplay">{{json matchState}}</pre>
+    </div>
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+
+</html>
