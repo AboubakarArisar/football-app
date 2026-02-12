@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Tournaments - Football</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .home-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .home-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #2ecc71;
+      padding-bottom: 20px;
+    }
+
+    .home-header h1 {
+      color: #27ae60;
+      margin: 0;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .welcome-text {
+      color: #7f8c8d;
+    }
+
+    .btn-dashboard {
+      padding: 10px 20px;
+      background-color: #2ecc71;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-dashboard:hover {
+      background-color: #27ae60;
+    }
+
+    .btn-login {
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-login:hover {
+      background-color: #2980b9;
+    }
+
+    .tournaments-section h2 {
+      color: #27ae60;
+      margin-bottom: 20px;
+    }
+
+    .tournaments-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+    }
+
+    .tournament-card {
+      border: 1px solid #bdc3c7;
+      border-radius: 8px;
+      padding: 20px;
+      background-color: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .tournament-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .tournament-card h3 {
+      color: #27ae60;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .tournament-info {
+      color: #7f8c8d;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+
+    .live-badge {
+      display: inline-block;
+      background-color: #e74c3c;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .tournament-stats {
+      display: flex;
+      justify-content: space-between;
+      margin: 15px 0;
+      padding: 10px 0;
+      border-top: 1px solid #ecf0f1;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-number {
+      color: #27ae60;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .stat-label {
+      color: #7f8c8d;
+      font-size: 12px;
+    }
+
+    .btn-view {
+      width: 100%;
+      padding: 12px;
+      margin-top: 15px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      text-decoration: none;
+      display: block;
+      text-align: center;
+    }
+
+    .btn-view:hover {
+      background-color: #2980b9;
+    }
+
+    .empty-message {
+      text-align: center;
+      color: #95a5a6;
+      padding: 50px 20px;
+      font-size: 18px;
+    }
+
+    .empty-message-content {
+      background-color: #ecf0f1;
+      padding: 30px;
+      border-radius: 8px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="home-container">
+    <div class="home-header">
+      <h1>⚽ Live Football Tournaments</h1>
+      <div class="header-right">
+        {{#if isLoggedIn}}
+          <a href="/dashboard" class="btn-dashboard">Dashboard</a>
+        {{else}}
+          <a href="/login" class="btn-login">Login</a>
+          <a href="/register" class="btn-login" style="background-color: #27ae60;">Register</a>
+        {{/if}}
+      </div>
+    </div>
+
+    <div class="tournaments-section">
+      <h2>Active Tournaments</h2>
+      {{#if activeTournaments}}
+        <div class="tournaments-grid">
+          {{#each activeTournaments}}
+            <div class="tournament-card">
+              <h3>{{this.name}}</h3>
+              {{#if this.live_matches_count}}
+                <span class="live-badge">🔴 LIVE - {{this.live_matches_count}} match{{#if (neq this.live_matches_count 1)}}es{{/if}} playing</span>
+              {{/if}}
+              
+              {{#if this.description}}
+                <p style="color: #7f8c8d; margin: 10px 0;">{{this.description}}</p>
+              {{/if}}
+
+              <div class="tournament-stats">
+                <div class="stat">
+                  <div class="stat-number">{{this.matches_count}}</div>
+                  <div class="stat-label">Total Matches</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-number">{{this.live_matches_count}}</div>
+                  <div class="stat-label">Live Now</div>
+                </div>
+              </div>
+
+              <a href="/tournament/{{this.id}}/view" class="btn-view">Watch Tournament</a>
+            </div>
+          {{/each}}
+        </div>
+      {{else}}
+        <div class="empty-message">
+          <div class="empty-message-content">
+            <p>No tournaments are currently active.</p>
+            {{#unless isLoggedIn}}
+              <p><a href="/login">Login</a> to create a tournament!</p>
+            {{/unless}}
+          </div>
+        </div>
+      {{/if}}
+    </div>
+  </div>
+</body>
+</html>

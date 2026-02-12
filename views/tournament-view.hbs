@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{tournament.name}} - Live Tournament</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .tournament-view-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .tournament-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #2ecc71;
+      padding-bottom: 20px;
+    }
+
+    .tournament-header h1 {
+      color: #27ae60;
+      margin: 0;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .btn-home {
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-home:hover {
+      background-color: #2980b9;
+    }
+
+    .live-matches-section h2 {
+      color: #e74c3c;
+      margin-bottom: 20px;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+
+    .all-matches-section h2 {
+      color: #27ae60;
+      margin-top: 40px;
+      margin-bottom: 20px;
+    }
+
+    .matches-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .match-card {
+      border: 1px solid #bdc3c7;
+      border-radius: 8px;
+      padding: 20px;
+      background-color: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s;
+      cursor: pointer;
+    }
+
+    .match-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .match-card.live {
+      border: 2px solid #e74c3c;
+      background-color: #fff5f5;
+    }
+
+    .live-indicator {
+      display: inline-block;
+      background-color: #e74c3c;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      animation: pulse 1.5s infinite;
+    }
+
+    .match-teams {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 15px 0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .match-team {
+      text-align: center;
+      flex: 1;
+    }
+
+    .match-score {
+      color: #27ae60;
+      font-size: 28px;
+      margin: 0 20px;
+    }
+
+    .match-status {
+      text-align: center;
+      padding: 8px;
+      background-color: #ecf0f1;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-size: 12px;
+      color: #7f8c8d;
+    }
+
+    .btn-watch {
+      width: 100%;
+      padding: 12px;
+      margin-top: 15px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      text-decoration: none;
+      display: block;
+      text-align: center;
+    }
+
+    .btn-watch:hover {
+      background-color: #2980b9;
+    }
+
+    .empty-message {
+      text-align: center;
+      color: #95a5a6;
+      padding: 30px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tournament-view-container">
+    <div class="tournament-header">
+      <h1>⚽ {{tournament.name}}</h1>
+      <div class="header-right">
+        <a href="/" class="btn-home">← Back to Tournaments</a>
+      </div>
+    </div>
+
+    {{#if liveMatches}}
+      <div class="live-matches-section">
+        <h2>🔴 LIVE MATCHES NOW</h2>
+        <div class="matches-grid">
+          {{#each liveMatches}}
+            <div class="match-card live">
+              <span class="live-indicator">LIVE</span>
+              <div class="match-teams">
+                <div class="match-team">{{this.home_team}}</div>
+                <div class="match-score">{{this.home_score}} - {{this.away_score}}</div>
+                <div class="match-team">{{this.away_team}}</div>
+              </div>
+              <div class="match-status">
+                {{#replace this.status '_' ' '}}{{uppercase this}}{{/replace}}
+                {{#if this.timer}}
+                  • {{this.timer}}s
+                {{/if}}
+              </div>
+              <a href="/tournament/{{@../tournament.id}}/match/{{this.id}}" class="btn-watch">Watch Live</a>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+    {{/if}}
+
+    <div class="all-matches-section">
+      <h2>All Matches</h2>
+      {{#if matches}}
+        <div class="matches-grid">
+          {{#each matches}}
+            <div class="match-card{{#if (or (eq this.status 'first_half') (eq this.status 'second_half') (eq this.status 'paused'))}} live{{/if}}">
+              {{#if (or (eq this.status 'first_half') (eq this.status 'second_half') (eq this.status 'paused'))}}
+                <span class="live-indicator">LIVE</span>
+              {{/if}}
+              <div class="match-teams">
+                <div class="match-team">{{this.home_team}}</div>
+                <div class="match-score">{{this.home_score}} - {{this.away_score}}</div>
+                <div class="match-team">{{this.away_team}}</div>
+              </div>
+              <div class="match-status">
+                {{#replace this.status '_' ' '}}{{uppercase this}}{{/replace}}
+                {{#if this.timer}}
+                  • {{this.timer}}s
+                {{/if}}
+              </div>
+              <a href="/tournament/{{@../tournament.id}}/match/{{this.id}}" class="btn-watch">
+                {{#if (or (eq this.status 'first_half') (eq this.status 'second_half') (eq this.status 'paused'))}}
+                  Watch Live
+                {{else}}
+                  View Match
+                {{/if}}
+              </a>
+            </div>
+          {{/each}}
+        </div>
+      {{else}}
+        <div class="empty-message">
+          No matches in this tournament yet.
+        </div>
+      {{/if}}
+    </div>
+  </div>
+</body>
+</html>

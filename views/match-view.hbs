@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Match - Football Tournament</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .match-view-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .match-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #2ecc71;
+      padding-bottom: 20px;
+    }
+
+    .tournament-title {
+      color: #7f8c8d;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .match-title {
+      color: #27ae60;
+      font-size: 24px;
+      margin: 5px 0 0 0;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .btn-back {
+      padding: 10px 20px;
+      background-color: #95a5a6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-back:hover {
+      background-color: #7f8c8d;
+    }
+
+    .match-status-badge {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 12px;
+      background-color: #ecf0f1;
+      color: #2c3e50;
+    }
+
+    .match-status-badge.live {
+      background-color: #e74c3c;
+      color: white;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .score-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 30px 0;
+      padding: 30px;
+      background-color: #ecf0f1;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .team {
+      flex: 1;
+    }
+
+    .team-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    .score {
+      font-size: 60px;
+      font-weight: bold;
+      color: #27ae60;
+    }
+
+    .vs {
+      font-size: 20px;
+      color: #7f8c8d;
+      margin: 0 20px;
+    }
+
+    .timer-section {
+      text-align: center;
+      margin: 30px 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .timer-info {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+    }
+
+    .timer-item {
+      text-align: center;
+    }
+
+    .timer-label {
+      font-size: 14px;
+      color: #7f8c8d;
+      margin-bottom: 5px;
+    }
+
+    .timer-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #27ae60;
+      font-family: monospace;
+    }
+
+    .match-info {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: #7f8c8d;
+      font-weight: bold;
+    }
+
+    .info-value {
+      color: #2c3e50;
+    }
+
+    .controls-section {
+      text-align: center;
+      margin-top: 30px;
+      padding: 20px;
+      background-color: #ecf0f1;
+      border-radius: 8px;
+    }
+
+    .btn-control {
+      padding: 12px 30px;
+      margin: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .btn-primary {
+      background-color: #2ecc71;
+    }
+
+    .btn-primary:hover {
+      background-color: #27ae60;
+    }
+
+    .btn-warning {
+      background-color: #f39c12;
+    }
+
+    .btn-warning:hover {
+      background-color: #e67e22;
+    }
+
+    .btn-success {
+      background-color: #3498db;
+    }
+
+    .btn-success:hover {
+      background-color: #2980b9;
+    }
+
+    .btn-danger {
+      background-color: #e74c3c;
+    }
+
+    .btn-danger:hover {
+      background-color: #c0392b;
+    }
+
+    .spectator-message {
+      text-align: center;
+      color: #7f8c8d;
+      padding: 20px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="match-view-container">
+    <div class="match-header">
+      <div>
+        <h3 class="tournament-title">{{tournament.name}}</h3>
+        <h1 class="match-title">Live Match</h1>
+      </div>
+      <div class="header-right">
+        <span class="match-status-badge {{#if (or (eq match.status 'first_half') (eq match.status 'second_half') (eq match.status 'paused'))}}live{{/if}}" id="statusBadge">
+          {{#replace match.status '_' ' '}}{{uppercase match.status}}{{/replace}}
+        </span>
+        <a href="/tournament/{{tournament.id}}/view" class="btn-back">← Back</a>
+      </div>
+    </div>
+
+    <div class="score-section">
+      <div class="team">
+        <div class="team-name" id="homeTeamName">{{match.home_team}}</div>
+        <div class="score" id="homeScore">{{match.home_score}}</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team">
+        <div class="team-name" id="awayTeamName">{{match.away_team}}</div>
+        <div class="score" id="awayScore">{{match.away_score}}</div>
+      </div>
+    </div>
+
+    <div class="timer-section">
+      <div class="timer-info">
+        <div class="timer-item">
+          <div class="timer-label">Half</div>
+          <div class="timer-value" id="halfDisplay">{{match.current_half}}</div>
+        </div>
+        <div class="timer-item">
+          <div class="timer-label">Time</div>
+          <div class="timer-value" id="timerDisplay">00:00</div>
+        </div>
+        <div class="timer-item">
+          <div class="timer-label">Extra Time</div>
+          <div class="timer-value" id="extraTimeDisplay">+{{match.extra_time}}s</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="match-info">
+      <div class="info-row">
+        <span class="info-label">Status:</span>
+        <span class="info-value" id="matchStatus">{{#replace match.status '_' ' '}}{{uppercase match.status}}{{/replace}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Current Half:</span>
+        <span class="info-value" id="currentHalf">{{match.current_half}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Timer (seconds):</span>
+        <span class="info-value" id="timerSeconds">{{match.timer}}</span>
+      </div>
+    </div>
+
+    {{#if isLoggedIn}}
+      <div class="controls-section">
+        <p style="margin-top: 0; color: #7f8c8d;">Admin Controls</p>
+        <button class="btn-control btn-primary" id="startMatch" {{#unless (eq match.status 'not_started')}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="startMatch()">Start Match</button>
+        <button class="btn-control btn-primary" id="startSecondHalf" {{#unless (eq match.status 'half_time')}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="startSecondHalf()">2nd Half</button>
+        <button class="btn-control btn-success" id="scoreHome" {{#unless (or (eq match.status 'first_half') (eq match.status 'second_half') (eq match.status 'paused'))}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="scoreGoal('home')">⚽ Home Goal</button>
+        <button class="btn-control btn-success" id="scoreAway" {{#unless (or (eq match.status 'first_half') (eq match.status 'second_half') (eq match.status 'paused'))}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="scoreGoal('away')">⚽ Away Goal</button>
+        <button class="btn-control btn-warning" id="pauseMatch" {{#unless (or (eq match.status 'first_half') (eq match.status 'second_half'))}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="pauseMatch()">⏸️ Pause</button>
+        <button class="btn-control btn-success" id="resumeMatch" {{#unless (eq match.status 'paused')}}style="pointer-events: none; opacity: 0.5;"{{/unless}} onclick="resumeMatch()">▶️ Resume</button>
+        <button class="btn-control btn-danger" id="resetMatch" onclick="resetMatch()">Reset Match</button>
+      </div>
+    {{else}}
+      <div class="spectator-message">
+        You are spectating this match. Login to manage matches.
+      </div>
+    {{/if}}
+  </div>
+
+  <script>
+    const tournamentId = {{tournament.id}};
+    const matchId = {{match.id}};
+    let eventSource = null;
+
+    function connectSSE() {
+      eventSource = new EventSource(`/api/tournaments/${tournamentId}/matches/${matchId}/events`);
+
+      eventSource.onmessage = (event) => {
+        const match = JSON.parse(event.data);
+        updateUI(match);
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        eventSource.close();
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    function updateUI(match) {
+      document.getElementById('homeScore').textContent = match.home_score;
+      document.getElementById('awayScore').textContent = match.away_score;
+      document.getElementById('halfDisplay').textContent = match.current_half;
+      document.getElementById('extraTimeDisplay').textContent = '+' + match.extra_time + 's';
+      document.getElementById('timerSeconds').textContent = match.timer;
+      document.getElementById('currentHalf').textContent = match.current_half;
+      
+      // Update status
+      const statusBadge = document.getElementById('statusBadge');
+      statusBadge.textContent = match.status.replace(/_/g, ' ').toUpperCase();
+      statusBadge.className = 'match-status-badge';
+      if (['first_half', 'second_half', 'paused'].includes(match.status)) {
+        statusBadge.classList.add('live');
+      }
+
+      const seconds = match.timer;
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      document.getElementById('timerDisplay').textContent = 
+        String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+
+      // Update match status display
+      document.getElementById('matchStatus').textContent = match.status.replace(/_/g, ' ').toUpperCase();
+    }
+
+    async function startMatch() {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/start`, { method: 'POST' });
+        const data = await response.json();
+        if (!data.success) alert(data.error);
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function startSecondHalf() {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/start-second-half`, { method: 'POST' });
+        const data = await response.json();
+        if (!data.success) alert(data.error);
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function scoreGoal(team) {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/score`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team })
+        });
+        const data = await response.json();
+        if (!data.success) alert(data.error);
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function pauseMatch() {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/pause`, { method: 'POST' });
+        const data = await response.json();
+        if (!data.success) alert(data.error);
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function resumeMatch() {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/resume`, { method: 'POST' });
+        const data = await response.json();
+        if (!data.success) alert(data.error);
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function resetMatch() {
+      if (confirm('Are you sure you want to reset this match?')) {
+        try {
+          const response = await fetch(`/api/matches/${matchId}/reset`, { method: 'POST' });
+          const data = await response.json();
+          if (!data.success) alert(data.error);
+        } catch (error) {
+          alert('Error: ' + error.message);
+        }
+      }
+    }
+
+    // Initialize
+    connectSSE();
+  </script>
+</body>
+</html>

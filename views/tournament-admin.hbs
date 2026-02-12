@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Tournament - Football</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .tournament-admin-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .tournament-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 2px solid #2ecc71;
+      padding-bottom: 20px;
+    }
+
+    .tournament-header h1 {
+      color: #27ae60;
+      margin: 0;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-back {
+      padding: 10px 20px;
+      background-color: #95a5a6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-back:hover {
+      background-color: #7f8c8d;
+    }
+
+    .btn-logout {
+      padding: 10px 20px;
+      background-color: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .btn-logout:hover {
+      background-color: #c0392b;
+    }
+
+    .create-match-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background-color: #ecf0f1;
+      border-radius: 8px;
+    }
+
+    .create-match-section h2 {
+      color: #27ae60;
+      margin-top: 0;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .form-group {
+      margin-bottom: 0;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #bdc3c7;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .btn-create-match {
+      padding: 12px 30px;
+      background-color: #2ecc71;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .btn-create-match:hover {
+      background-color: #27ae60;
+    }
+
+    .matches-section h2 {
+      color: #27ae60;
+      margin-bottom: 20px;
+    }
+
+    .matches-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .match-card {
+      border: 1px solid #bdc3c7;
+      border-radius: 8px;
+      padding: 20px;
+      background-color: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .match-teams {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 15px 0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .match-team {
+      text-align: center;
+      flex: 1;
+    }
+
+    .match-score {
+      color: #27ae60;
+      font-size: 28px;
+      margin: 0 20px;
+    }
+
+    .match-status {
+      text-align: center;
+      padding: 8px;
+      background-color: #ecf0f1;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-size: 12px;
+      color: #7f8c8d;
+    }
+
+    .match-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .btn-small {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      flex: 1;
+      min-width: 100px;
+    }
+
+    .btn-start {
+      background-color: #2ecc71;
+      color: white;
+    }
+
+    .btn-start:hover {
+      background-color: #27ae60;
+    }
+
+    .btn-view {
+      background-color: #3498db;
+      color: white;
+    }
+
+    .btn-view:hover {
+      background-color: #2980b9;
+    }
+
+    .empty-message {
+      text-align: center;
+      color: #95a5a6;
+      padding: 30px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tournament-admin-container">
+    <div class="tournament-header">
+      <h1>{{tournament.name}}</h1>
+      <div class="header-right">
+        <a href="/dashboard" class="btn-back">← Back to Dashboard</a>
+        <a href="/logout" class="btn-logout">Logout</a>
+      </div>
+    </div>
+
+    <div class="create-match-section">
+      <h2>Create New Match</h2>
+      <form id="matchForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="homeTeam">Home Team</label>
+            <input type="text" id="homeTeam" name="home_team" required>
+          </div>
+          <div class="form-group">
+            <label for="awayTeam">Away Team</label>
+            <input type="text" id="awayTeam" name="away_team" required>
+          </div>
+          <div class="form-group">
+            <label for="halfDuration">Half Duration (seconds)</label>
+            <input type="number" id="halfDuration" name="half_duration" value="300" min="1">
+          </div>
+        </div>
+        <button type="submit" class="btn-create-match">Create Match</button>
+        <span id="createMessage"></span>
+      </form>
+    </div>
+
+    <div class="matches-section">
+      <h2>Matches in Tournament</h2>
+      {{#if matches}}
+        <div class="matches-list">
+          {{#each matches}}
+            <div class="match-card">
+              <div class="match-teams">
+                <div class="match-team">{{this.home_team}}</div>
+                <div class="match-score">{{this.home_score}} - {{this.away_score}}</div>
+                <div class="match-team">{{this.away_team}}</div>
+              </div>
+              <div class="match-status">
+                {{#replace this.status '_' ' '}}{{uppercase this}}{{/replace}}
+                {{#if this.timer}}
+                  • {{this.timer}}s
+                {{/if}}
+              </div>
+              <div class="match-controls">
+                {{#eq this.status 'not_started'}}
+                  <button class="btn-small btn-start" onclick="startMatch({{this.id}})">Start Match</button>
+                  <a href="/tournament/{{@../tournament.id}}/match/{{this.id}}" class="btn-small btn-view">Watch</a>
+                {{/eq}}
+                {{#eq this.status 'half_time'}}
+                  <button class="btn-small btn-start" onclick="startSecondHalf({{this.id}})">2nd Half</button>
+                  <a href="/tournament/{{@../tournament.id}}/match/{{this.id}}" class="btn-small btn-view">Watch</a>
+                {{/eq}}
+                {{#or (eq this.status 'first_half') (eq this.status 'second_half') (eq this.status 'paused')}}
+                  <a href="/tournament/{{@../tournament.id}}/match/{{this.id}}" class="btn-small btn-view">Manage</a>
+                {{/or}}
+              </div>
+            </div>
+          {{/each}}
+        </div>
+      {{else}}
+        <div class="empty-message">
+          No matches yet. Create one above to get started!
+        </div>
+      {{/if}}
+    </div>
+  </div>
+
+  <script>
+    const tournamentId = {{tournament.id}};
+
+    document.getElementById('matchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const homeTeam = document.getElementById('homeTeam').value;
+      const awayTeam = document.getElementById('awayTeam').value;
+      const halfDuration = document.getElementById('halfDuration').value;
+      const message = document.getElementById('createMessage');
+
+      try {
+        const response = await fetch('/api/matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tournament_id: tournamentId,
+            home_team: homeTeam,
+            away_team: awayTeam,
+            half_duration: halfDuration
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          message.textContent = 'Match created! Refreshing...';
+          message.style.color = '#2ecc71';
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          message.textContent = 'Error: ' + data.error;
+          message.style.color = '#e74c3c';
+        }
+      } catch (error) {
+        message.textContent = 'Error: ' + error.message;
+        message.style.color = '#e74c3c';
+      }
+    });
+
+    async function startMatch(matchId) {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/start`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          window.location.reload();
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function startSecondHalf(matchId) {
+      try {
+        const response = await fetch(`/api/matches/${matchId}/start-second-half`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          window.location.reload();
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>

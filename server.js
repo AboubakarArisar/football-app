@@ -2,12 +2,23 @@
 require('dotenv').config();
 
 const express = require('express');
+const session = require('express-session');
 const path = require('path');
 const hbs = require('hbs');
+const { connectDB, users, tournaments, matches } = require('./db');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'change-this-secret-in-production';
 const ENABLE_TUNNEL = process.env.ENABLE_TUNNEL === 'true';
-const TUNNEL_SERVICE = process.env.TUNNEL_SERVICE || 'localtunnel'; // 'localtunnel' or 'ngrok'
+
+// Session configuration
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: true,
+  cookie: { maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+}));
 
 // Set up Handlebars as view engine
 app.set('view engine', 'hbs');
@@ -46,319 +57,714 @@ hbs.registerHelper('toMinutes', function(seconds) {
   return Math.floor(seconds / 60);
 });
 
-// Serve static files
+
+// Middleware
 app.use(express.static('public'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Match state
-let matchState = {
-  status: 'not_started', // not_started, first_half, half_time, second_half, finished, paused
-  currentHalf: 1,
-  timer: 0, // seconds elapsed in current half
-  halfDuration: 60, // Default 1 minute = 60 seconds (can be changed)
-  extraTime: 0, // random 5-10 seconds
-  homeScore: 0,
-  awayScore: 0,
-  homeTeam: 'Home Team',
-  awayTeam: 'Away Team',
-  isPaused: false,
-  lastEvent: null, // Track last event: 'start', 'pause', 'resume', 'half_time', 'second_half', 'penalty', 'finished'
-  intervalId: null
-};
+// Authentication middleware
+function isAuthenticated(req, res, next) {
+  if (req.session && req.session.userId) {
+    next();
+  } else {
+    res.redirect('/login');
+  }
+}
 
-// Store SSE clients
-const clients = new Set();
+// Optional authentication (allow access but check if logged in)
+function checkAuth(req, res, next) {
+  if (req.session && req.session.userId) {
+    req.user = users.findById(req.session.userId);
+  }
+  next();
+}
 
-// Sanitize match state for JSON serialization (remove circular references)
+// Sanitize match state for JSON serialization
 function sanitizeMatchState(state) {
   return {
+    id: state.id,
+    tournament_id: state.tournament_id,
     status: state.status,
-    currentHalf: state.currentHalf,
+    current_half: state.current_half,
     timer: state.timer,
-    halfDuration: state.halfDuration,
-    extraTime: state.extraTime,
-    homeScore: state.homeScore,
-    awayScore: state.awayScore,
-    homeTeam: state.homeTeam,
-    awayTeam: state.awayTeam,
-    isPaused: state.isPaused,
-    lastEvent: state.lastEvent // Track last event for whistle sounds
+    half_duration: state.half_duration,
+    extra_time: state.extra_time,
+    home_score: state.home_score,
+    away_score: state.away_score,
+    home_team: state.home_team,
+    away_team: state.away_team,
+    is_paused: state.is_paused
   };
 }
 
-// Broadcast function to send updates to all clients
-function broadcast(data) {
-  const sanitized = sanitizeMatchState(data);
-  const message = `data: ${JSON.stringify(sanitized)}\n\n`;
-  clients.forEach(client => {
-    try {
-      client.write(message);
-    } catch (error) {
-      clients.delete(client);
-    }
-  });
-}
+// Store match timers and SSE clients per tournament
+const matchTimers = {};
+const sseClients = {};
 
-// Match timer logic
-function startTimer() {
-  if (matchState.intervalId) {
-    clearInterval(matchState.intervalId);
+// Auth Routes
+app.get('/login', checkAuth, (req, res) => {
+  if (req.user) {
+    return res.redirect('/dashboard');
+  }
+  res.render('login');
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.render('login', { error: 'Username and password are required' });
   }
 
-  matchState.intervalId = setInterval(() => {
-    // Don't increment timer if paused
-    if (matchState.isPaused) {
-      return;
+  try {
+    const user = await users.findByUsername(username);
+    
+    if (!user || !users.verifyPassword(user.password, password)) {
+      return res.render('login', { error: 'Invalid username or password' });
     }
-    
-    matchState.timer++;
-    
-    // Calculate extra time when half duration is reached (if not already calculated)
-    if (matchState.timer === matchState.halfDuration && matchState.extraTime === 0) {
-      matchState.extraTime = Math.floor(Math.random() * 6) + 5; // Random 5-10 seconds
-      broadcast(matchState);
-      return; // Don't check for end yet, continue to extra time
-    }
-    
-    // Check if half time is reached (including extra time)
-    const totalTime = matchState.halfDuration + matchState.extraTime;
-    if (matchState.timer >= totalTime) {
-      if (matchState.status === 'first_half') {
-        matchState.status = 'half_time';
-        matchState.timer = 0;
-        matchState.extraTime = 0; // Reset for next half
-        matchState.isPaused = false;
-        matchState.lastEvent = 'half_time';
-        clearInterval(matchState.intervalId);
-        matchState.intervalId = null;
-      } else if (matchState.status === 'second_half') {
-        matchState.status = 'finished';
-        matchState.extraTime = 0; // Reset
-        matchState.isPaused = false;
-        matchState.lastEvent = 'finished';
-        clearInterval(matchState.intervalId);
-        matchState.intervalId = null;
-      }
-    }
-    
-    broadcast(matchState);
-  }, 1000);
-}
 
-// Routes
-app.get('/', (req, res) => {
-  // Pass sanitized state to template (without intervalId)
-  const sanitized = sanitizeMatchState(matchState);
-  res.render('client', { matchState: sanitized });
+    req.session.userId = user._id;
+    req.session.username = user.username;
+    res.redirect('/dashboard');
+  } catch (error) {
+    res.render('login', { error: 'Login failed' });
+  }
 });
 
-app.get('/admin', (req, res) => {
-  // Pass sanitized state to template (without intervalId)
-  const sanitized = sanitizeMatchState(matchState);
-  res.render('admin', { matchState: sanitized });
+app.get('/register', checkAuth, (req, res) => {
+  if (req.user) {
+    return res.redirect('/dashboard');
+  }
+  res.render('register');
 });
 
-// API endpoint to get current match state (for initial page load)
-app.get('/api/match/state', (req, res) => {
-  res.json(sanitizeMatchState(matchState));
+app.post('/register', (req, res) => {
+  const { username, email, password, confirmPassword } = req.body;
+
+  if (!username || !email || !password || !confirmPassword) {
+    return res.render('register', { error: 'All fields are required' });
+  }
+
+  if (password !== confirmPassword) {
+    return res.render('register', { error: 'Passwords do not match' });
+  }
+
+  if (password.length < 6) {
+    return res.render('register', { error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    users.create(username, email, password);
+    res.render('register', { success: 'Account created successfully! Please login.' });
+  } catch (error) {
+    res.render('register', { error: error.message });
+  }
 });
 
-// SSE endpoint for real-time updates
-app.get('/events', (req, res) => {
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
+});
+
+// Dashboard - User's tournaments
+app.get('/dashboard', isAuthenticated, async (req, res) => {
+  const userTournaments = await tournaments.findByCreator(req.session.userId);
+  res.render('dashboard', {
+    username: req.session.username,
+    tournaments: userTournaments
+  });
+});
+
+// Home - View live tournaments/matches
+app.get('/', checkAuth, async (req, res) => {
+  const activeTournaments = await tournaments.findAll();
+  
+  // Get match info for each tournament
+  const tournamentsWithMatches = await Promise.all(activeTournaments.map(async (tournament) => {
+    const tournamentMatches = await matches.findByTournament(tournament._id);
+    const liveMatches = tournamentMatches.filter(m => 
+      ['first_half', 'second_half', 'paused'].includes(m.status)
+    );
+    return {
+      ...tournament.toObject(),
+      live_matches_count: liveMatches.length,
+      matches_count: tournamentMatches.length
+    };
+  }));
+
+  res.render('home', {
+    activeTournaments: tournamentsWithMatches,
+    isLoggedIn: !!req.user
+  });
+});
+
+// Serve static files
+
+// Tournament Management
+app.post('/api/tournaments', isAuthenticated, async (req, res) => {
+  const { name, description } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'Tournament name is required' });
+  }
+
+  try {
+    const tournamentId = await tournaments.create(req.session.userId, name, description);
+    res.json({ success: true, tournament_id: tournamentId });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/tournaments/:id', async (req, res) => {
+  const tournament = await tournaments.findById(req.params.id);
+  
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  const tournamentMatches = await matches.findByTournament(tournament._id);
+  res.json({
+    ...tournament.toObject(),
+    matches: tournamentMatches
+  });
+});
+
+app.post('/api/tournaments/:id/start', isAuthenticated, async (req, res) => {
+  const tournament = await tournaments.findById(req.params.id);
+  
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const updated = await tournaments.update(req.params.id, {
+      status: 'active',
+      started_at: new Date().toISOString()
+    });
+    res.json({ success: true, tournament: updated });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/tournaments/:id/finish', isAuthenticated, async (req, res) => {
+  const tournament = await tournaments.findById(req.params.id);
+  
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const updated = await tournaments.update(req.params.id, {
+      status: 'finished',
+      finished_at: new Date().toISOString()
+    });
+    res.json({ success: true, tournament: updated });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Match Management
+app.post('/api/matches', isAuthenticated, async (req, res) => {
+  const { tournament_id, home_team, away_team, half_duration } = req.body;
+
+  if (!tournament_id || !home_team || !away_team) {
+    return res.status(400).json({ success: false, error: 'Missing required fields' });
+  }
+
+  const tournament = await tournaments.findById(tournament_id);
+  if (!tournament || tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const matchId = await matches.create(
+      tournament_id,
+      home_team,
+      away_team,
+      half_duration ? parseInt(half_duration) : 300
+    );
+    
+    // Initialize SSE clients for this tournament if not exists
+    if (!sseClients[tournament_id]) {
+      sseClients[tournament_id] = {};
+    }
+
+    res.json({ success: true, match_id: matchId });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/matches/:id', async (req, res) => {
+  const match = await matches.findById(req.params.id);
+  
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  res.json(sanitizeMatchState(match));
+});
+
+// Get initial match state
+app.get('/api/matches/:id/state', async (req, res) => {
+  const match = await matches.findById(req.params.id);
+  
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  res.json(sanitizeMatchState(match));
+});
+
+// SSE Connection for live updates - specific match in tournament
+app.get('/api/tournaments/:tournament_id/matches/:match_id/events', async (req, res) => {
+  const { tournament_id, match_id } = req.params;
+  const match = await matches.findById(match_id);
+
+  if (!match || match.tournament_id.toString() !== tournament_id) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  // Initialize tournament SSE clients if needed
+  if (!sseClients[tournament_id]) {
+    sseClients[tournament_id] = {};
+  }
+
   // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  // Send initial state immediately (sanitized)
-  const sanitized = sanitizeMatchState(matchState);
+  // Send initial state
+  const sanitized = sanitizeMatchState(match);
   res.write(`data: ${JSON.stringify(sanitized)}\n\n`);
 
-  // Store client connection
-  clients.add(res);
+  // Store client connection by match ID
+  if (!sseClients[tournament_id][match_id]) {
+    sseClients[tournament_id][match_id] = new Set();
+  }
+  sseClients[tournament_id][match_id].add(res);
 
   // Remove client on disconnect
   req.on('close', () => {
-    clients.delete(res);
+    if (sseClients[tournament_id] && sseClients[tournament_id][match_id]) {
+      sseClients[tournament_id][match_id].delete(res);
+    }
   });
 });
 
-// Admin API endpoints
-app.post('/api/match/start', (req, res) => {
-  if (matchState.status === 'not_started') {
-    matchState.status = 'first_half';
-    matchState.currentHalf = 1;
-    matchState.timer = 0;
-    matchState.extraTime = 0; // Will be calculated when half duration is reached
-    matchState.lastEvent = 'start';
-    startTimer();
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Match already started' });
-  }
-});
-
-app.post('/api/match/start-second-half', (req, res) => {
-  if (matchState.status === 'half_time') {
-    matchState.status = 'second_half';
-    matchState.currentHalf = 2;
-    matchState.timer = 0;
-    matchState.extraTime = 0; // Will be calculated when half duration is reached
-    matchState.lastEvent = 'second_half';
-    startTimer();
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Cannot start second half in current state' });
-  }
-});
-
-app.post('/api/match/score', (req, res) => {
-  const { team } = req.body; // 'home' or 'away'
+// Broadcast match update to all SSE clients
+function broadcastMatch(tournamentId, matchId, matchState) {
+  const sanitized = sanitizeMatchState(matchState);
+  const message = `data: ${JSON.stringify(sanitized)}\n\n`;
   
-  if (matchState.status === 'first_half' || matchState.status === 'second_half' || matchState.status === 'paused') {
-    if (team === 'home') {
-      matchState.homeScore++;
-    } else if (team === 'away') {
-      matchState.awayScore++;
-    }
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Match is not in progress' });
-  }
-});
-
-app.post('/api/match/reset', (req, res) => {
-  if (matchState.intervalId) {
-    clearInterval(matchState.intervalId);
-    matchState.intervalId = null;
-  }
-  const homeTeam = matchState.homeTeam;
-  const awayTeam = matchState.awayTeam;
-  const halfDuration = matchState.halfDuration;
-  matchState = {
-    status: 'not_started',
-    currentHalf: 1,
-    timer: 0,
-    halfDuration: halfDuration,
-    extraTime: 0,
-    homeScore: 0,
-    awayScore: 0,
-    homeTeam: homeTeam,
-    awayTeam: awayTeam,
-    isPaused: false,
-    lastEvent: null,
-    intervalId: null
-  };
-  broadcast(matchState);
-  res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-});
-
-// Set team names
-app.post('/api/match/teams', (req, res) => {
-  const { homeTeam, awayTeam } = req.body;
-  if (homeTeam) matchState.homeTeam = homeTeam;
-  if (awayTeam) matchState.awayTeam = awayTeam;
-  broadcast(matchState);
-  res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-});
-
-// Set half duration
-app.post('/api/match/half-duration', (req, res) => {
-  const { duration } = req.body; // duration in seconds
-  if (duration && duration > 0 && matchState.status === 'not_started') {
-    matchState.halfDuration = parseInt(duration);
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Can only set duration before match starts' });
-  }
-});
-
-// Pause/Resume match
-app.post('/api/match/pause', (req, res) => {
-  if (matchState.status === 'first_half' || matchState.status === 'second_half') {
-    matchState.isPaused = true;
-    matchState.status = 'paused';
-    matchState.lastEvent = 'pause';
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Match is not in progress' });
-  }
-});
-
-app.post('/api/match/resume', (req, res) => {
-  if (matchState.status === 'paused') {
-    // Restore previous status based on current half
-    matchState.status = matchState.currentHalf === 1 ? 'first_half' : 'second_half';
-    matchState.isPaused = false;
-    matchState.lastEvent = 'resume';
-    // Restart timer if it was stopped
-    if (!matchState.intervalId) {
-      startTimer();
-    }
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Match is not paused' });
-  }
-});
-
-// Penalty
-app.post('/api/match/penalty', (req, res) => {
-  const { team, result } = req.body; // team: 'home' or 'away', result: 'scored' or 'missed'
-  
-  if (matchState.status === 'first_half' || matchState.status === 'second_half' || matchState.status === 'paused') {
-    matchState.lastEvent = 'penalty';
-    if (result === 'scored') {
-      if (team === 'home') {
-        matchState.homeScore++;
-      } else if (team === 'away') {
-        matchState.awayScore++;
+  if (sseClients[tournamentId] && sseClients[tournamentId][matchId]) {
+    sseClients[tournamentId][matchId].forEach(client => {
+      try {
+        client.write(message);
+      } catch (error) {
+        sseClients[tournamentId][matchId].delete(client);
       }
+    });
+  }
+}
+
+// Start match timer
+function startMatchTimer(matchId, tournamentId) {
+  if (matchTimers[matchId]) {
+    clearInterval(matchTimers[matchId]);
+  }
+
+  const intervalId = setInterval(async () => {
+    try {
+      const match = await matches.findById(matchId);
+      
+      if (!match) {
+        clearInterval(matchTimers[matchId]);
+        delete matchTimers[matchId];
+        return;
+      }
+
+      // Don't increment if paused
+      if (match.is_paused) {
+        return;
+      }
+
+      // Increment timer
+      let newTimer = match.timer + 1;
+      let newExtraTime = match.extra_time;
+
+      // Calculate extra time when half duration is reached
+      if (newTimer === match.half_duration && newExtraTime === 0) {
+        newExtraTime = Math.floor(Math.random() * 6) + 5;
+      }
+
+      // Check if half is finished
+      const totalTime = match.half_duration + newExtraTime;
+      let newStatus = match.status;
+
+      if (newTimer >= totalTime) {
+        if (match.status === 'first_half') {
+          newStatus = 'half_time';
+          newTimer = 0;
+          newExtraTime = 0;
+        } else if (match.status === 'second_half') {
+          newStatus = 'finished';
+          newExtraTime = 0;
+          clearInterval(matchTimers[matchId]);
+          delete matchTimers[matchId];
+        }
+      }
+
+      // Update match in database
+      await matches.update(matchId, {
+        timer: newTimer,
+        extra_time: newExtraTime,
+        status: newStatus
+      });
+
+      // Get updated match and broadcast
+      const updatedMatch = await matches.findById(matchId);
+      broadcastMatch(tournamentId, matchId, updatedMatch);
+    } catch (error) {
+      console.error('Timer update error:', error);
     }
-    // If missed, no score change
-    broadcast(matchState);
-    res.json({ success: true, matchState: sanitizeMatchState(matchState) });
-  } else {
-    res.json({ success: false, message: 'Match is not in progress' });
+  }, 1000);
+
+  matchTimers[matchId] = intervalId;
+}
+
+// Match API endpoints
+app.post('/api/matches/:id/start', isAuthenticated, async (req, res) => {
+  const match = await matches.findById(req.params.id);
+  
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (match.status !== 'not_started') {
+    return res.status(400).json({ error: 'Match already started' });
+  }
+
+  try {
+    await matches.update(req.params.id, {
+      status: 'first_half',
+      current_half: 1,
+      timer: 0,
+      extra_time: 0,
+      started_at: new Date().toISOString()
+    });
+
+    startMatchTimer(req.params.id, match.tournament_id);
+
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
   }
 });
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`\n╔═══════════════════════════════════════════════════════╗`);
-  console.log(`║     ⚽ Football Match App Started Successfully! ⚽     ║`);
-  console.log(`╚═══════════════════════════════════════════════════════╝\n`);
-  console.log(`📍 Local URLs:`);
-  console.log(`   Admin:  http://localhost:${PORT}/admin`);
-  console.log(`   Client: http://localhost:${PORT}/\n`);
+app.post('/api/matches/:id/start-second-half', isAuthenticated, async (req, res) => {
+  const match = await matches.findById(req.params.id);
   
-  // Start tunneling if enabled
-  if (ENABLE_TUNNEL) {
-    startTunnel();
-  } else {
-    console.log(`💡 To enable tunneling, set ENABLE_TUNNEL=true`);
-    console.log(`   Example: ENABLE_TUNNEL=true npm start\n`);
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (match.status !== 'half_time') {
+    return res.status(400).json({ error: 'Cannot start second half' });
+  }
+
+  try {
+    await matches.update(req.params.id, {
+      status: 'second_half',
+      current_half: 2,
+      timer: 0,
+      extra_time: 0
+    });
+
+    startMatchTimer(req.params.id, match.tournament_id);
+
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
   }
 });
+
+app.post('/api/matches/:id/score', isAuthenticated, async (req, res) => {
+  const { team } = req.body;
+  const match = await matches.findById(req.params.id);
+
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (!['first_half', 'second_half', 'paused'].includes(match.status)) {
+    return res.status(400).json({ error: 'Match is not in progress' });
+  }
+
+  try {
+    const updates = {};
+    if (team === 'home') {
+      updates.home_score = match.home_score + 1;
+    } else if (team === 'away') {
+      updates.away_score = match.away_score + 1;
+    }
+
+    await matches.update(req.params.id, updates);
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/matches/:id/pause', isAuthenticated, async (req, res) => {
+  const match = await matches.findById(req.params.id);
+
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (!['first_half', 'second_half'].includes(match.status)) {
+    return res.status(400).json({ error: 'Match is not in progress' });
+  }
+
+  try {
+    await matches.update(req.params.id, {
+      status: 'paused',
+      is_paused: true
+    });
+
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/matches/:id/resume', isAuthenticated, async (req, res) => {
+  const match = await matches.findById(req.params.id);
+
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (match.status !== 'paused') {
+    return res.status(400).json({ error: 'Match is not paused' });
+  }
+
+  try {
+    const status = match.current_half === 1 ? 'first_half' : 'second_half';
+    await matches.update(req.params.id, {
+      status: status,
+      is_paused: false
+    });
+
+    // Restart timer if needed
+    if (!matchTimers[req.params.id]) {
+      startMatchTimer(req.params.id, match.tournament_id);
+    }
+
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/matches/:id/reset', isAuthenticated, async (req, res) => {
+  const match = await matches.findById(req.params.id);
+
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  const tournament = await tournaments.findById(match.tournament_id);
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    if (matchTimers[req.params.id]) {
+      clearInterval(matchTimers[req.params.id]);
+      delete matchTimers[req.params.id];
+    }
+
+    await matches.update(req.params.id, {
+      status: 'not_started',
+      current_half: 1,
+      timer: 0,
+      extra_time: 0,
+      home_score: 0,
+      away_score: 0,
+      is_paused: false
+    });
+
+    const updated = await matches.findById(req.params.id);
+    broadcastMatch(match.tournament_id, req.params.id, updated);
+    res.json({ success: true, match: sanitizeMatchState(updated) });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Tournament Admin View
+app.get('/tournament/:id', isAuthenticated, async (req, res) => {
+  const tournament = await tournaments.findById(req.params.id);
+
+  if (!tournament) {
+    return res.status(404).render('error', { error: 'Tournament not found' });
+  }
+
+  if (tournament.creator_id.toString() !== req.session.userId) {
+    return res.status(403).render('error', { error: 'Unauthorized' });
+  }
+
+  const tournamentMatches = await matches.findByTournament(req.params.id);
+  res.render('tournament-admin', {
+    tournament: tournament.toObject ? tournament.toObject() : tournament,
+    matches: tournamentMatches,
+    username: req.session.username
+  });
+});
+
+// Tournament view for spectators
+app.get('/tournament/:id/view', checkAuth, async (req, res) => {
+  const tournament = await tournaments.findById(req.params.id);
+
+  if (!tournament || tournament.status !== 'active') {
+    return res.status(404).render('error', { error: 'Tournament not found or not active' });
+  }
+
+  const tournamentMatches = await matches.findByTournament(req.params.id);
+  const liveMatches = tournamentMatches.filter(m => 
+    ['first_half', 'second_half', 'paused'].includes(m.status)
+  );
+
+  res.render('tournament-view', {
+    tournament: tournament.toObject ? tournament.toObject() : tournament,
+    matches: tournamentMatches,
+    liveMatches,
+    isLoggedIn: !!req.user
+  });
+});
+
+// Specific match view
+app.get('/tournament/:tournament_id/match/:match_id', checkAuth, async (req, res) => {
+  const tournament = await tournaments.findById(req.params.tournament_id);
+  const match = await matches.findById(req.params.match_id);
+
+  if (!tournament || !match || match.tournament_id.toString() !== req.params.tournament_id) {
+    return res.status(404).render('error', { error: 'Match not found' });
+  }
+
+  if (tournament.status !== 'active') {
+    return res.status(404).render('error', { error: 'Tournament not active' });
+  }
+
+  res.render('match-view', {
+    tournament: tournament.toObject ? tournament.toObject() : tournament,
+    match: sanitizeMatchState(match),
+    isLoggedIn: !!req.user
+  });
+});
+
+
+
+// Start server with MongoDB connection
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    console.log('✅ Connected to MongoDB');
+
+    const server = app.listen(PORT, () => {
+      console.log(`\n╔═══════════════════════════════════════════════════════╗`);
+      console.log(`║   ⚽ Football Tournament App Started Successfully! ⚽  ║`);
+      console.log(`╚═══════════════════════════════════════════════════════╝\n`);
+      console.log(`📍 Local URLs:`);
+      console.log(`   Home:      http://localhost:${PORT}/`);
+      console.log(`   Login:     http://localhost:${PORT}/login`);
+      console.log(`   Register:  http://localhost:${PORT}/register`);
+      console.log(`   Dashboard: http://localhost:${PORT}/dashboard\n`);
+      
+      if (ENABLE_TUNNEL) {
+        startTunnel();
+      }
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('\n🛑 Shutting down gracefully...');
+      server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+      });
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
 
 // Tunneling function
 function startTunnel() {
-  if (TUNNEL_SERVICE === 'localtunnel') {
+  if (process.env.TUNNEL_SERVICE === 'localtunnel') {
     const localtunnel = require('localtunnel');
     
     localtunnel({ port: PORT, subdomain: process.env.TUNNEL_SUBDOMAIN })
       .then(tunnel => {
         console.log(`🌐 Tunnel Active (localtunnel):`);
-        console.log(`   Admin:  ${tunnel.url}/admin`);
-        console.log(`   Client: ${tunnel.url}/\n`);
-        console.log(`⚠️  Tunnel URL will change on restart (use TUNNEL_SUBDOMAIN for fixed URL)\n`);
+        console.log(`   Home: ${tunnel.url}/\n`);
         
         tunnel.on('close', () => {
           console.log('⚠️  Tunnel closed. Reconnecting...');
@@ -367,44 +773,6 @@ function startTunnel() {
       })
       .catch(err => {
         console.error('❌ Tunnel error:', err.message);
-        console.log('💡 Trying without subdomain...\n');
-        // Retry without subdomain
-        localtunnel({ port: PORT })
-          .then(tunnel => {
-            console.log(`🌐 Tunnel Active (localtunnel):`);
-            console.log(`   Admin:  ${tunnel.url}/admin`);
-            console.log(`   Client: ${tunnel.url}/\n`);
-          })
-          .catch(err => console.error('❌ Tunnel failed:', err.message));
       });
-  } else if (TUNNEL_SERVICE === 'ngrok') {
-    try {
-      const ngrok = require('ngrok');
-      ngrok.connect({
-        addr: PORT,
-        authtoken: process.env.NGROK_AUTH_TOKEN // Optional, for custom domains
-      }).then(url => {
-        console.log(`🌐 Tunnel Active (ngrok):`);
-        console.log(`   Admin:  ${url}/admin`);
-        console.log(`   Client: ${url}/\n`);
-        console.log(`📊 Ngrok Dashboard: http://127.0.0.1:4040\n`);
-      }).catch(err => {
-        console.error('❌ Ngrok error:', err.message);
-        console.log('💡 Install ngrok: npm install -g ngrok');
-        console.log('   Or use localtunnel: TUNNEL_SERVICE=localtunnel npm start\n');
-      });
-    } catch (err) {
-      console.error('❌ Ngrok not installed. Install with: npm install ngrok');
-      console.log('💡 Or use localtunnel: TUNNEL_SERVICE=localtunnel npm start\n');
-    }
   }
 }
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('\n🛑 Shutting down gracefully...');
-  server.close(() => {
-    console.log('✅ Server closed');
-    process.exit(0);
-  });
-});
